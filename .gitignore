@@ -1,0 +1,15 @@
+
+.DS*
+
+*__pycache__
+
+.vscode
+
+.vscode/settings.json
+
+scratch
+
+experiments
+
+utils/data
+

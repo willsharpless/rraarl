@@ -114,5 +114,8 @@ q, stats = learn(
 )
 
 v = v_from_q(q)
-visualize_matrix(v.T)
-visualize_matrix(np.sign(v).T)
+V_fig = visualize_matrix(v.T, no_show=True)
+plt.savefig("TQ_zermelo_V.png")
+V_sign_fig = visualize_matrix(np.sign(v).T, no_show=True)
+plt.savefig("TQ_zermelo_V_sign.png")
+

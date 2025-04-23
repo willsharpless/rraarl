@@ -51,6 +51,9 @@ parser.add_argument(
     "-p", "--path", help="path to model", default='toThreshold', type=str
 )
 parser.add_argument(
+    "-ts", "--test_step", help="model step to load", default=50000, type=int
+)
+parser.add_argument(
     "-cfg", "--config_path", help="path to CONFIG.pkl file",
     default='toThreshold', type=str
 )
@@ -247,7 +250,7 @@ def run_experiment(args, CONFIG, env):
   return trainProgress
 
 
-def test_experiment(path, config_path, env, doneType='toFailureOrSuccess'):
+def test_experiment(step, path, config_path, env, doneType='toFailureOrSuccess'):
   """Plot the value function slices.
 
   Args:
@@ -273,19 +276,22 @@ def test_experiment(path, config_path, env, doneType='toFailureOrSuccess'):
   dimList = [s_dim] + CONFIG.ARCHITECTURE + [numAction]
   agent = DDQNSingle(
       CONFIG, numAction, actionList, dimList, mode='RA',
-      actType=CONFIG.ACTIVATION
+    #   actType=CONFIG.ACTIVATION
   )
-  agent.restore(path)
+  agent.restore(step, path)
 
   # Visualize value function.
   env.visualize(
       agent.Q_network, True, nx=91, ny=91, boolPlot=False, trueRAZero=False,
       addBias=False, lvlset=0
   )
-  plt.show()
+#   plt.show()
+  plt.savefig("test_sim_lunar_lander_plot.png")
+
 
 
 if args.test:
-  test_experiment(args.path, args.config_path, env)
+  congif_path = os.path.join(outFolder, "model", args.config_path)
+  test_experiment(args.test_step, outFolder, congif_path, env)
 else:
   run_experiment(args, CONFIG, env)
