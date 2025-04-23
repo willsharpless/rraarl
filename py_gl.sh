@@ -19,7 +19,7 @@ export QT_QPA_PLATFORM=offscreen
 
 # Activate your Conda env
 source ~/miniconda3/etc/profile.d/conda.sh
-conda activate rlgym
+conda activate rarl_new
 
 # Run the script
 python "$@"
