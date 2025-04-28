@@ -38,7 +38,8 @@ class ZermeloShowRAAEnv(gym.Env):
             Defaults to 0.1.
         sample_inside_obs (bool, optional): consider sampling the state inside
             the obstacles if True. Defaults to False.
-        envType (str, optional): environment type. Defaults to 'gap'.
+        envType (str, optional): environment type. 
+            Defaults to 'gap'. Avoid only have 'NAME_avoid', eg. 'gap_avoid'
     """
     self.envType = envType
 
@@ -68,20 +69,24 @@ class ZermeloShowRAAEnv(gym.Env):
 
     # Constraint Set Parameters.
     # [X-position, Y-position, width, height]
-    if envType == 'gap':
+    if envType == 'gap' or envType == 'gap_avoid':
       self.constraint_x_y_w_h = np.array([
           [0.75, 3, 1., 1.],
           [-0.75, 3, 1., 1.],
           [0, 6, 2.5, 1.],
       ])
       self.constraint_type = ['C', 'C', 'C']
-    elif envType == 'behind':
+      self.constraint = True
+    elif envType == 'behind' or envType == 'behind_avoid':
       self.constraint_x_y_w_h = np.array([
           # [1.25, 2, 1.5, 1.5],
           # [-1.25, 2, 1.5, 1.5],
           [0, 6, 3, 1.5],
       ])
       self.constraint_type = ['C']
+      self.constraint = True
+    else:
+      self.constriant = False
     # if envType == 'basic':
     #   self.constraint_x_y_w_h = np.array([
     #       [1.25, 2, 1.5, 1.5],
@@ -115,11 +120,16 @@ class ZermeloShowRAAEnv(gym.Env):
       self.target_x_y_w_h = np.array([
         [0., 4.5, 2., 1.5]
       ])
-    else:
+      self.target = True
+    elif envType == 'behind':
       self.target_x_y_w_h = np.array([
         [0., 9.25, 1.5, 1.5]
         [0., 0., 1., 1.5]
       ])
+      self.target = True
+    else:
+      self.target = False
+
     # if envType == 'basic' or envType == 'easy':
     #   self.target_x_y_w_h = np.array([[0., 9.25, 1.5, 1.5]])
     # else:
@@ -154,8 +164,10 @@ class ZermeloShowRAAEnv(gym.Env):
     self.doneType = doneType
 
     # Visualization Parameters
-    self.constraint_set_boundary = self.get_constraint_set_boundary()
-    self.target_set_boundary = self.get_target_set_boundary()
+    if self.constraint:
+      self.constraint_set_boundary = self.get_constraint_set_boundary()
+    if self.target:
+      self.target_set_boundary = self.get_target_set_boundary()
     self.visual_initial_states = [
         np.array([0, 0]),
         np.array([-0.5, 0]), #findme
@@ -269,7 +281,7 @@ class ZermeloShowRAAEnv(gym.Env):
     success = l_x <= 0
 
     # = `cost` signal
-    if self.mode == 'RA':
+    if self.mode in ['RA', 'R', 'A', 'RAA', 'RR', 'RRAA']:
       if fail:
         cost = self.penalty
       elif success:
@@ -431,19 +443,23 @@ class ZermeloShowRAAEnv(gym.Env):
         float: postivive numbers indicate being inside the failure set (safety
             violation).
     """
-    g_x_list = []
+    if self.constraint:
+      g_x_list = []
 
-    # constraint_set_safety_margin
-    for _, constraint_set in enumerate(self.constraint_x_y_w_h):
-      g_x = calculate_margin_rect(s, constraint_set, negativeInside=False)
+      # constraint_set_safety_margin
+      for _, constraint_set in enumerate(self.constraint_x_y_w_h):
+        g_x = calculate_margin_rect(s, constraint_set, negativeInside=False)
+        g_x_list.append(g_x)
+
+      # enclosure_safety_margin
+      boundary_x_y_w_h = np.append(self.midpoint, self.interval)
+      g_x = calculate_margin_rect(s, boundary_x_y_w_h, negativeInside=True)
       g_x_list.append(g_x)
 
-    # enclosure_safety_margin
-    boundary_x_y_w_h = np.append(self.midpoint, self.interval)
-    g_x = calculate_margin_rect(s, boundary_x_y_w_h, negativeInside=True)
-    g_x_list.append(g_x)
+      safety_margin = np.max(np.array(g_x_list))
 
-    safety_margin = np.max(np.array(g_x_list))
+    else:
+      safety_margin = -self.target_margin(s)/self.scaling
 
     return self.scaling * safety_margin
 
@@ -457,14 +473,18 @@ class ZermeloShowRAAEnv(gym.Env):
         float: negative numbers indicate reaching the target. If the target set
             is not specified, return None.
     """
-    l_x_list = []
+    if self.target:
+      l_x_list = []
 
-    # target_set_safety_margin
-    for _, target_set in enumerate(self.target_x_y_w_h):
-      l_x = calculate_margin_rect(s, target_set, negativeInside=True)
-      l_x_list.append(l_x)
+      # target_set_safety_margin
+      for _, target_set in enumerate(self.target_x_y_w_h):
+        l_x = calculate_margin_rect(s, target_set, negativeInside=True)
+        l_x_list.append(l_x)
 
-    target_margin = np.max(np.array(l_x_list))
+      target_margin = np.max(np.array(l_x_list))
+
+    else:
+      target_margin = self.safety_margin(s)/self.scaling
 
     return self.scaling * target_margin
 
@@ -597,7 +617,7 @@ class ZermeloShowRAAEnv(gym.Env):
       l_x = self.target_margin(np.array([x, y]))
       g_x = self.safety_margin(np.array([x, y]))
 
-      if self.mode == 'normal' or self.mode == 'RA':
+      if self.mode in ['normal', 'RA', 'R', 'A', 'RAA', 'RR', 'RRAA']:
         state = torch.FloatTensor([x, y]).to(self.device).unsqueeze(0)
       else:
         z = max([l_x, g_x])
@@ -649,10 +669,10 @@ class ZermeloShowRAAEnv(gym.Env):
           result = 1
           break
       else:
-        if self.safety_margin(state[:2]) > 0:
+        if self.constraint and self.safety_margin(state[:2]) > 0:
           result = -1  # failed
           break
-        elif self.target_margin(state[:2]) <= 0:
+        elif self.target and self.target_margin(state[:2]) <= 0:
           result = 1  # succeeded
           break
 
@@ -882,18 +902,20 @@ class ZermeloShowRAAEnv(gym.Env):
         zorder (int, optional): graph layers order. Defaults to 1.
     """
     # Plot bounadries of constraint set.
-    for one_boundary in self.constraint_set_boundary:
-      ax.plot(
-          one_boundary[:, 0], one_boundary[:, 1], color=c_c, lw=lw,
-          zorder=zorder
-      )
+    if self.constraint:
+      for one_boundary in self.constraint_set_boundary:
+        ax.plot(
+            one_boundary[:, 0], one_boundary[:, 1], color=c_c, lw=lw,
+            zorder=zorder
+        )
 
     # Plot boundaries of target set.
-    for one_boundary in self.target_set_boundary:
-      ax.plot(
-          one_boundary[:, 0], one_boundary[:, 1], color=c_t, lw=lw,
-          zorder=zorder
-      )
+    if self.target:
+      for one_boundary in self.target_set_boundary:
+        ax.plot(
+            one_boundary[:, 0], one_boundary[:, 1], color=c_t, lw=lw,
+            zorder=zorder
+        )
 
   def plot_reach_avoid_set(self, ax=None, c='g', lw=3, zorder=1):
     """Plots the analytic reach-avoid set.
@@ -916,24 +938,25 @@ class ZermeloShowRAAEnv(gym.Env):
       return xs, ys
 
     # unsafe set
-    for cons, cType in zip(self.constraint_x_y_w_h, self.constraint_type):
-      x, y, w, h = cons
-      x1 = x - w/2.0
-      x2 = x + w/2.0
-      y_min = y - h/2.0
-      if cType == 'C':
-        xs, ys = get_line(-slope, end_point=[x1, y_min], x_limit=x)
-        ax.plot(xs, ys, color=c, linewidth=lw, zorder=zorder)
-        xs, ys = get_line(slope, end_point=[x2, y_min], x_limit=x)
-        ax.plot(xs, ys, color=c, linewidth=lw, zorder=zorder)
-      elif cType == 'L':
-        x_limit = self.bounds[0, 0]
-        xs, ys = get_line(slope, end_point=[x2, y_min], x_limit=x_limit)
-        ax.plot(xs, ys, color=c, linewidth=lw, zorder=zorder)
-      elif cType == 'R':
-        x_limit = self.bounds[0, 1]
-        xs, ys = get_line(-slope, end_point=[x1, y_min], x_limit=x_limit)
-        ax.plot(xs, ys, color=c, linewidth=lw, zorder=zorder)
+    if self.constraint:
+      for cons, cType in zip(self.constraint_x_y_w_h, self.constraint_type):
+        x, y, w, h = cons
+        x1 = x - w/2.0
+        x2 = x + w/2.0
+        y_min = y - h/2.0
+        if cType == 'C':
+          xs, ys = get_line(-slope, end_point=[x1, y_min], x_limit=x)
+          ax.plot(xs, ys, color=c, linewidth=lw, zorder=zorder)
+          xs, ys = get_line(slope, end_point=[x2, y_min], x_limit=x)
+          ax.plot(xs, ys, color=c, linewidth=lw, zorder=zorder)
+        elif cType == 'L':
+          x_limit = self.bounds[0, 0]
+          xs, ys = get_line(slope, end_point=[x2, y_min], x_limit=x_limit)
+          ax.plot(xs, ys, color=c, linewidth=lw, zorder=zorder)
+        elif cType == 'R':
+          x_limit = self.bounds[0, 1]
+          xs, ys = get_line(-slope, end_point=[x1, y_min], x_limit=x_limit)
+          ax.plot(xs, ys, color=c, linewidth=lw, zorder=zorder)
 
     # # border unsafe set
     # x, y, w, h = self.target_x_y_w_h[0]

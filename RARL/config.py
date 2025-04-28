@@ -114,7 +114,8 @@ class dqnConfig(config):
       GAMMA_PERIOD=200, GAMMA_DECAY=0.5, TAU=0.01, HARD_UPDATE=1,
       SOFT_UPDATE=True, MEMORY_CAPACITY=10000, BATCH_SIZE=32, RENDER=False,
       MAX_MODEL=10, DOUBLE=True, ARCHITECTURE=None, ACTIVATION="Tanh",
-      SKIP=False, REWARD=-1, PENALTY=1
+      SKIP=False, REWARD=-1, PENALTY=1,
+      LOAD_MODEL_PATH_1='', LOAD_MODEL_PATH_2='',
   ):
     """
     Initializes a configuration object for (double) deep Q-network with the
@@ -165,3 +166,6 @@ class dqnConfig(config):
     self.TAU = TAU
     self.HARD_UPDATE = HARD_UPDATE
     self.SOFT_UPDATE = SOFT_UPDATE
+    self.LOAD_MODEL_PATH_1 = LOAD_MODEL_PATH_1
+    self.LOAD_MODEL_PATH_2 = LOAD_MODEL_PATH_2
+

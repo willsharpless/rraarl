@@ -27,7 +27,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import torch
 
-from RARL.DDQNSingle import DDQNSingle
+from RARL.DDQNSingleRRAA import DDQNSingleRRAA
 from RARL.config import dqnConfig
 from RARL.utils import save_obj
 from gym_reachability import gym_reachability  # Custom Gym env.
@@ -58,6 +58,9 @@ parser.add_argument(
 )
 parser.add_argument(
     "-s", "--scaling", help="scaling of ell/g", default=4, type=float
+)
+parser.add_argument(
+    "-et", "--envType", help="env type", default='gap', type=str
 )
 
 # training scheme
@@ -120,8 +123,20 @@ parser.add_argument(
     "-sf", "--storeFigure", help="store figures", action="store_true", default=True,
 )
 
+# load models
+parser.add_argument(
+    "-lp1", "--load_model_path_1", help="path to presovled Q network (1)", default='', type=str
+)
+parser.add_argument(
+    "-lp2", "--load_model_path_2", help="path to presovled Q network (2)", default='', type=str
+)
+
 args = parser.parse_args()
 print(args)
+
+# # debugging
+# args.mode = 'A'
+# args.envType = 'gap_avoid'
 
 # == CONFIGURATION ==
 env_name = "zermelo_show_RAA"
@@ -151,9 +166,9 @@ if args.mode == 'lagrange':
   GAMMA_END = args.gamma
   EPS_PERIOD = updatePeriod
   EPS_RESET_PERIOD = maxUpdates
-elif args.mode == 'RA':
-  envMode = 'RA'
-  agentMode = 'RA'
+else:
+  envMode = args.mode
+  agentMode = args.mode
   if args.annealing:
     GAMMA_END = 0.999999
     EPS_PERIOD = int(updatePeriod / 10)
@@ -172,7 +187,7 @@ elif args.doneType == 'TF' or args.doneType == 'fail':
 print("\n== Environment Information ==")
 env = gym.make(
     env_name, device=device, mode=envMode, doneType=args.doneType,
-    sample_inside_obs=sample_inside_obs, envType='gap'
+    sample_inside_obs=sample_inside_obs, envType=args.envType
 )
 
 stateDim = env.state.shape[0]
@@ -277,12 +292,14 @@ CONFIG = dqnConfig(
     ACTIVATION=args.actType, GAMMA=args.gamma, GAMMA_PERIOD=updatePeriod,
     GAMMA_END=GAMMA_END, EPS_PERIOD=EPS_PERIOD, EPS_DECAY=0.7,
     EPS_RESET_PERIOD=EPS_RESET_PERIOD, LR_C=args.learningRate,
-    LR_C_PERIOD=updatePeriod, LR_C_DECAY=0.8, MAX_MODEL=100
+    LR_C_PERIOD=updatePeriod, LR_C_DECAY=0.8, MAX_MODEL=100,
+    LOAD_MODEL_PATH_1=args.load_model_path_1,
+    LOAD_MODEL_PATH_2=args.load_model_path_2,
 )
 
 # == AGENT ==
 dimList = [stateDim] + CONFIG.ARCHITECTURE + [actionNum]
-agent = DDQNSingle(
+agent = DDQNSingleRRAA(
     CONFIG, actionNum, action_list, dimList=dimList, mode=agentMode,
     terminalType=args.terminalType
 )

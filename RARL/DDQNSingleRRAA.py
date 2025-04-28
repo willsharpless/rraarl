@@ -27,10 +27,11 @@ from .model import Model
 from .DDQN import DDQN, Transition
 
 
-class DDQNSingle(DDQN):
+class DDQNSingleRRAA(DDQN):
   """
   Implements the double deep Q-network algorithm. Supports minimizing the
   reach-avoid cost or the standard sum of discounted costs.
+  Will added: reach-always avoid and standard avoid.
 
   Args:
       DDQN (object): an object implementing the basic utils functions.
@@ -38,7 +39,7 @@ class DDQNSingle(DDQN):
 
   def __init__(
       self, CONFIG, numAction, actionList, dimList, mode="RA",
-      terminalType="g", verbose=True
+      terminalType="g", verbose=True, 
   ):
     """
     Initializes with a configuration object, environment information, neural
@@ -56,9 +57,9 @@ class DDQNSingle(DDQN):
             Defaults to 'g'.
         verbose (bool, optional): print the messages if True. Defaults to True.
     """
-    super(DDQNSingle, self).__init__(CONFIG)
+    super(DDQNSingleRRAA, self).__init__(CONFIG)
 
-    self.mode = mode  # 'normal' or 'RA'
+    self.mode = mode  # 'normal', 'R', 'A', 'RA', 'RR', 'RRAA'
     self.terminalType = terminalType
 
     # == ENV PARAM ==
@@ -72,6 +73,12 @@ class DDQNSingle(DDQN):
     print(
         "DDQN: mode-{}; terminalType-{}".format(self.mode, self.terminalType)
     )
+
+    # == Load pre-solved networks ==
+    if mode in ["RAA", "RR", "RRAA"]:
+      if not CONFIG.LOAD_MODEL_PATH_1 and not CONFIG.LOAD_MODEL_PATH_2:
+        raise AssertionError("Must load presovled models for RAA / RR / RRAA problems")
+      self.load_network(dimList, self.actType, verbose, CONFIG.LOAD_MODEL_PATH_1, CONFIG.LOAD_MODEL_PATH_2)
 
   def build_network(self, dimList, actType="Tanh", verbose=True):
     """Builds a neural network for the Q-network.
@@ -89,6 +96,33 @@ class DDQNSingle(DDQN):
       self.target_network.cuda()
 
     self.build_optimizer()
+
+  def load_network(self, dimList, actType="Tanh", verbose=True, load_model_path_1='', load_model_path_2=''):
+    """Loads neural network(s) for the Q-network of pre-solved problem.
+
+    Args:
+        dimList (np.ndarray): dimensions of each layer in the neural network.
+        actType (str, optional): activation function. Defaults to 'Tanh'.
+        verbose (bool, optional): print the messages if True. Defaults to True.
+        load_model_path_1, _2 (str): path to Q-XXXXX.pth file for loading presolved Q-networks
+    """
+    if load_model_path_1:
+      
+      self.Q_decomposed_1 = Model(dimList, actType, verbose=verbose)
+      self.Q_decomposed_1.load_state_dict(torch.load(load_model_path_1, weights_only=True)['model'])
+      self.Q_decomposed_1.eval()
+      
+      if self.device == torch.device("cuda"):
+        self.Q_decomposed_1.cuda()
+
+    if load_model_path_2:
+      
+      self.Q_decomposed_2 = Model(dimList, actType, verbose=verbose)
+      self.Q_decomposed_2.load_state_dict(torch.load(load_model_path_2, weights_only=True)['model'])
+      self.Q_decomposed_2.eval()
+
+      if self.device == torch.device("cuda"):
+        self.Q_decomposed_2.cuda()
 
   def update(self, addBias=False):
     """Updates the Q-network using a batch of sampled replay transitions.
@@ -143,40 +177,139 @@ class DDQNSingle(DDQN):
         Q_expect = self.Q_network(non_final_state_nxt)
     state_value_nxt[non_final_mask] = \
         Q_expect.gather(dim=1, index=action_nxt).view(-1)
+    
+    # == Compute presolved values ==
+    if self.mode in ["RAA", "RR", "RRAA"]:
+      with torch.no_grad():
+        # self.Q_decomposed_1.eval()
+        action_nxt = (self.Q_decomposed_1(state).min(1, keepdim=True)[1]) # state for current s, RAA only
+        Q_expect = self.Q_decomposed_1(state)
+        state_value_decomposed_g[non_final_mask] = \
+          Q_expect.gather(dim=1, index=action_nxt).view(-1)
+        # WAS TODO: can we just do smth like?:
+        # state_value_decomposed_g[non_final_mask] = \
+        #   self.Q_decomposed_1(state).min(1, keepdim=True)
+        # WAS TODO: why non_final_mask? maybe efficiency / due to sampling?
 
     # == Discounted Reach-Avoid Bellman Equation (DRABE) ==
-    if self.mode == "RA":
+    if self.mode in ["RA",  "R", "A", "RAA", "RR", "RRAA"]:
+
       y = torch.zeros(self.BATCH_SIZE).float().to(self.device)
       final_mask = torch.logical_not(non_final_mask)
-      if addBias:  # Bias version:
-        # V(s) = gamma ( max{ g(s), min{ l(s), V_diff(s') } }
-        #        - max{ g(s), l(s) } ),
-        # where V_diff(s') = V(s') + max{ g(s'), l(s') }
-        min_term = torch.min(l_x, state_value_nxt + torch.max(l_x, g_x))
-        terminal = torch.max(l_x, g_x)
-        non_terminal = torch.max(min_term, g_x) - terminal
-        y[non_final_mask] = self.GAMMA * non_terminal[non_final_mask]
-        y[final_mask] = terminal[final_mask]
-      else:
-        # Another version (discussed on Feb. 22, 2021):
-        # we want Q(s, u) = V( f(s,u) ).
+
+      if self.mode == "RA":
+        if addBias:  # Bias version:
+          # V(s) = gamma ( max{ g(s), min{ l(s), V_diff(s') } }
+          #        - max{ g(s), l(s) } ),
+          # where V_diff(s') = V(s') + max{ g(s'), l(s') }
+          min_term = torch.min(l_x, state_value_nxt + torch.max(l_x, g_x))
+          terminal = torch.max(l_x, g_x)
+          non_terminal = torch.max(min_term, g_x) - terminal
+          y[non_final_mask] = self.GAMMA * non_terminal[non_final_mask]
+          y[final_mask] = terminal[final_mask]
+        else:
+          # Another version (discussed on Feb. 22, 2021):
+          # we want Q(s, u) = V( f(s,u) ).
+          non_terminal = torch.max(
+              g_x[non_final_mask],
+              torch.min(l_x[non_final_mask], state_value_nxt[non_final_mask]),
+          )
+          terminal = torch.max(l_x, g_x)
+
+          # normal state
+          y[non_final_mask] = non_terminal * self.GAMMA + terminal[
+              non_final_mask] * (1 - self.GAMMA)
+
+          # terminal state
+          if self.terminalType == "g":
+            y[final_mask] = g_x[final_mask]
+          elif self.terminalType == "max":
+            y[final_mask] = terminal[final_mask]
+          else:
+            raise ValueError("invalid terminalType")
+          
+      # WAS: Implementing straight-forward Bellman update (no bias atm)
+      elif self.mode == "A":
+        # V(s) = (1 - gamma) g(s) + gamma max{ g(s), V(s') }
+
         non_terminal = torch.max(
-            g_x[non_final_mask],
-            torch.min(l_x[non_final_mask], state_value_nxt[non_final_mask]),
+          g_x[non_final_mask], 
+          state_value_nxt[non_final_mask]
+        )
+        terminal = g_x
+
+        # normal state
+        y[non_final_mask] = non_terminal * self.GAMMA + terminal[non_final_mask] * (1 - self.GAMMA)
+
+        # terminal state
+        y[final_mask] = g_x[final_mask]
+
+      elif self.mode == "R":
+        # V(s) = (1 - gamma) l(s) + gamma min{ l(s), V(s') }
+
+        non_terminal = torch.min(
+          l_x[non_final_mask], 
+          state_value_nxt[non_final_mask]
+        )
+        terminal = l_x
+
+        # normal state
+        y[non_final_mask] = non_terminal * self.GAMMA + terminal[non_final_mask] * (1 - self.GAMMA)
+
+        # terminal state
+        y[final_mask] = l_x[final_mask]
+      
+      elif self.mode == "RAA":
+        # V(s) = (1 - gamma) max{ g(s), l(s) } 
+        #         + gamma min{ max{ g(s), V(s') }, max{ l(s), Va(s) } }
+
+        state_value_decomposed_g = None #FIXME, defined by presolved Q network
+
+        non_terminal = torch.max(
+            torch.max(g_x[non_final_mask], state_value_nxt[non_final_mask]),
+            torch.max(l_x[non_final_mask], state_value_decomposed_g[non_final_mask]),
         )
         terminal = torch.max(l_x, g_x)
 
         # normal state
-        y[non_final_mask] = non_terminal * self.GAMMA + terminal[
-            non_final_mask] * (1 - self.GAMMA)
+        y[non_final_mask] = non_terminal * self.GAMMA + terminal[non_final_mask] * (1 - self.GAMMA)
 
-        # terminal state
+        # terminal state #TODO WAS: why does this matter? I would think terminal correct, but default g?
         if self.terminalType == "g":
           y[final_mask] = g_x[final_mask]
         elif self.terminalType == "max":
           y[final_mask] = terminal[final_mask]
         else:
           raise ValueError("invalid terminalType")
+        
+      elif self.mode == "RR":
+        # V(s) = (1 - gamma) max{ l1(s), l2(s) } 
+        #         + gamma min{ max{ g(s), V(s') }, max{ l(s), Va(s) } }
+        
+        state_value_decomposed_l1 = None #FIXME, defined by presolved Q network
+        state_value_decomposed_l2 = None #FIXME, defined by presolved Q network
+        l1_x, l2_x = None, None
+
+        non_terminal = torch.min(
+            torch.min(torch.max(l1_x[non_final_mask], l2_x[non_final_mask]),
+                      state_value_nxt[non_final_mask]),
+            torch.min(torch.min(l1_x[non_final_mask], state_value_decomposed_l1[non_final_mask]),
+                      torch.min(l2_x[non_final_mask], state_value_decomposed_l2[non_final_mask]))
+        )
+        terminal = torch.max(l1_x, l2_x)
+
+        # normal state
+        y[non_final_mask] = non_terminal * self.GAMMA + terminal[non_final_mask] * (1 - self.GAMMA)
+
+        # terminal state #TODO WAS: why does this matter? I would think terminal correct, but default g?
+        y[final_mask] = terminal[final_mask]
+        # if self.terminalType == "g":
+        #   y[final_mask] = g_x[final_mask]
+        # elif self.terminalType == "max":
+        #   y[final_mask] = terminal[final_mask]
+        # else:
+        #   raise ValueError("invalid terminalType")
+
     else:  # V(s) = c(s, a) + gamma * V(s')
       y = state_value_nxt * self.GAMMA + reward
 
@@ -480,8 +613,8 @@ class DDQNSingle(DDQN):
     timeLearning = endLearning - startLearning
     self.save(self.cntUpdate, modelFolder)
     print(
-        "\nTimes: InitBuffer: {:.1f}s, InitQ: {:.1f}s, Learning: {:.1f}m".format(
-            timeInitBuffer, timeInitQ, timeLearning/60
+        "\nInitBuffer: {:.1f}, InitQ: {:.1f}, Learning: {:.1f}".format(
+            timeInitBuffer, timeInitQ, timeLearning
         )
     )
     trainingRecords = np.array(trainingRecords)

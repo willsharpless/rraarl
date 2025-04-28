@@ -22,4 +22,4 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate rarl_new
 
 # Run the script
-python "$@"
+CUDA_VISIBLE_DEVICES=1 python "$@"
