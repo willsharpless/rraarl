@@ -2,7 +2,7 @@
 
 # To run,
 # timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
-# ./exec/run_tests.sh 2>&1 | tee /exec/logs/run_$timestamp.log
+# ./exec/scan_RAA.sh 2>&1 | tee /exec/logs/run_$timestamp.log
 
 # Test avoid problem
 
