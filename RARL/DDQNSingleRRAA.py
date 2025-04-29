@@ -109,7 +109,7 @@ class DDQNSingleRRAA(DDQN):
     if load_model_path_1:
       
       self.Q_decomposed_1 = Model(dimList, actType, verbose=verbose)
-      self.Q_decomposed_1.load_state_dict(torch.load(load_model_path_1, weights_only=True)['model'])
+      self.Q_decomposed_1.load_state_dict(torch.load(load_model_path_1, weights_only=True))
       self.Q_decomposed_1.eval()
       
       if self.device == torch.device("cuda"):
@@ -143,9 +143,16 @@ class DDQNSingleRRAA(DDQN):
     # for detailed explanation). This converts batch-array of Transitions
     # to Transition of batch-arrays.
     batch = Transition(*zip(*transitions))
-    (non_final_mask, non_final_state_nxt, state, action, reward, g_x,
-     l_x) = self.unpack_batch(batch)
 
+    if self.mode in ['RA', 'R', 'A', 'RAA']:
+      (non_final_mask, non_final_state_nxt, state, action, reward, g_x, l_x) = self.unpack_batch(batch)
+    elif self.mode in ['RR']:
+      (non_final_mask, non_final_state_nxt, state, action, reward, l1_x, l2_x) = self.unpack_batch(batch)
+    elif self.mode in ['RR', 'RRAA']:
+      (non_final_mask, non_final_state_nxt, state, action, reward, g_x, l1_x, l2_x) = self.unpack_batch(batch)
+    else:
+      raise AssertionError("Invalid mode")
+    
     # == get Q(s,a) ==
     # `gather` reguires that idx is Long and input and index should have the
     # same shape with only difference at the dimension we want to extract.
@@ -180,16 +187,18 @@ class DDQNSingleRRAA(DDQN):
     
     # == Compute presolved values ==
     if self.mode in ["RAA", "RR", "RRAA"]:
+
+      state_value_decomposed_l1 = torch.zeros(self.BATCH_SIZE).to(self.device)
+      state_value_decomposed_l2 = torch.zeros(self.BATCH_SIZE).to(self.device)
+      state_value_decomposed_g = torch.zeros(self.BATCH_SIZE).to(self.device)
+
       with torch.no_grad():
-        # self.Q_decomposed_1.eval()
-        action_nxt = (self.Q_decomposed_1(state).min(1, keepdim=True)[1]) # state for current s, RAA only
-        Q_expect = self.Q_decomposed_1(state)
-        state_value_decomposed_g[non_final_mask] = \
-          Q_expect.gather(dim=1, index=action_nxt).view(-1)
-        # WAS TODO: can we just do smth like?:
-        # state_value_decomposed_g[non_final_mask] = \
-        #   self.Q_decomposed_1(state).min(1, keepdim=True)
-        # WAS TODO: why non_final_mask? maybe efficiency / due to sampling?
+        if self.mode == "RAA":
+          state_value_decomposed_g = self.Q_decomposed_1(state).min(1, keepdim=True)[0].view(-1)
+        
+        if self.mode == "RR" or self.mode == "RRAA":
+          state_value_decomposed_l1 = self.Q_decomposed_1(state).min(1, keepdim=True)[0].view(-1)
+          state_value_decomposed_l2 = self.Q_decomposed_2(state).min(1, keepdim=True)[0].view(-1)
 
     # == Discounted Reach-Avoid Bellman Equation (DRABE) ==
     if self.mode in ["RA",  "R", "A", "RAA", "RR", "RRAA"]:
@@ -263,9 +272,7 @@ class DDQNSingleRRAA(DDQN):
         # V(s) = (1 - gamma) max{ g(s), l(s) } 
         #         + gamma min{ max{ g(s), V(s') }, max{ l(s), Va(s) } }
 
-        state_value_decomposed_g = None #FIXME, defined by presolved Q network
-
-        non_terminal = torch.max(
+        non_terminal = torch.min(
             torch.max(g_x[non_final_mask], state_value_nxt[non_final_mask]),
             torch.max(l_x[non_final_mask], state_value_decomposed_g[non_final_mask]),
         )
@@ -285,10 +292,6 @@ class DDQNSingleRRAA(DDQN):
       elif self.mode == "RR":
         # V(s) = (1 - gamma) max{ l1(s), l2(s) } 
         #         + gamma min{ max{ g(s), V(s') }, max{ l(s), Va(s) } }
-        
-        state_value_decomposed_l1 = None #FIXME, defined by presolved Q network
-        state_value_decomposed_l2 = None #FIXME, defined by presolved Q network
-        l1_x, l2_x = None, None
 
         non_terminal = torch.min(
             torch.min(torch.max(l1_x[non_final_mask], l2_x[non_final_mask]),

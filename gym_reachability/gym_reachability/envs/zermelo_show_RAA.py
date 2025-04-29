@@ -669,10 +669,10 @@ class ZermeloShowRAAEnv(gym.Env):
           result = 1
           break
       else:
-        if self.constraint and self.safety_margin(state[:2]) > 0:
+        if self.mode in ["RA", "A", "RAA", "RRAA"] and self.safety_margin(state[:2]) > 0:
           result = -1  # failed
           break
-        elif self.target and self.target_margin(state[:2]) <= 0:
+        if self.mode in ["RA", "R"] and self.target_margin(state[:2]) <= 0:
           result = 1  # succeeded
           break
 
@@ -888,7 +888,7 @@ class ZermeloShowRAAEnv(gym.Env):
     return results
 
   def plot_target_failure_set(
-      self, ax=None, c_c='m', c_t='y', lw=1.5, zorder=1
+      self, ax=None, c_c='r', c_t='b', lw=2, zorder=1
   ):
     """Plots the target and the failure set.
 
