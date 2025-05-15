@@ -147,9 +147,9 @@ class DDQNSingleRRAA(DDQN):
     if self.mode in ['RA', 'R', 'A', 'RAA']:
       (non_final_mask, non_final_state_nxt, state, action, reward, g_x, l_x) = self.unpack_batch(batch)
     elif self.mode in ['RR']:
-      (non_final_mask, non_final_state_nxt, state, action, reward, l1_x, l2_x) = self.unpack_batch(batch)
-    elif self.mode in ['RR', 'RRAA']:
-      (non_final_mask, non_final_state_nxt, state, action, reward, g_x, l1_x, l2_x) = self.unpack_batch(batch)
+      (non_final_mask, non_final_state_nxt, state, action, reward, l_x, l2_x) = self.unpack_batch(batch)
+    elif self.mode in ['RRAA']:
+      (non_final_mask, non_final_state_nxt, state, action, reward, g_x, l_x, l2_x) = self.unpack_batch(batch)
     else:
       raise AssertionError("Invalid mode")
     
@@ -294,12 +294,12 @@ class DDQNSingleRRAA(DDQN):
         #         + gamma min{ max{ g(s), V(s') }, max{ l(s), Va(s) } }
 
         non_terminal = torch.min(
-            torch.min(torch.max(l1_x[non_final_mask], l2_x[non_final_mask]),
+            torch.min(torch.max(l_x[non_final_mask], l2_x[non_final_mask]),
                       state_value_nxt[non_final_mask]),
-            torch.min(torch.min(l1_x[non_final_mask], state_value_decomposed_l1[non_final_mask]),
+            torch.min(torch.min(l_x[non_final_mask], state_value_decomposed_l1[non_final_mask]),
                       torch.min(l2_x[non_final_mask], state_value_decomposed_l2[non_final_mask]))
         )
-        terminal = torch.max(l1_x, l2_x)
+        terminal = torch.max(l_x, l2_x)
 
         # normal state
         y[non_final_mask] = non_terminal * self.GAMMA + terminal[non_final_mask] * (1 - self.GAMMA)

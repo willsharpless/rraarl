@@ -44,3 +44,8 @@ register(
     id="zermelo_show_RAA",
     entry_point="gym_reachability.gym_reachability.envs:ZermeloShowRAAEnv"
 )
+
+register(
+    id="zermelo_show_RR",
+    entry_point="gym_reachability.gym_reachability.envs:ZermeloShowRREnv"
+)

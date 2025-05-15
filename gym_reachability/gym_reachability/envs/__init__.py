@@ -20,3 +20,6 @@ from .zermelo_show import ZermeloShowEnv
 
 from .zermelo_show_RAA import ZermeloShowRAAEnv
 
+from .zermelo_show_RR import ZermeloShowRREnv
+
+

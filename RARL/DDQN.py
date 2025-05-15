@@ -236,12 +236,26 @@ class DDQN(abc.ABC):
     action = torch.LongTensor(batch.a).to(self.device).view(-1, 1)
     reward = torch.FloatTensor(batch.r).to(self.device)
 
-    g_x = torch.FloatTensor([info["g_x"] for info in batch.info])
-    g_x = g_x.to(self.device).view(-1)
+    if "g_x" in batch.info[0].keys() and "l_x" in batch.info[0].keys():
 
-    l_x = torch.FloatTensor([info["l_x"] for info in batch.info])
-    l_x = l_x.to(self.device).view(-1)
+      g_x = torch.FloatTensor([info["g_x"] for info in batch.info])
+      g_x = g_x.to(self.device).view(-1)
 
-    return (
-        non_final_mask, non_final_state_nxt, state, action, reward, g_x, l_x
-    )
+      l_x = torch.FloatTensor([info["l_x"] for info in batch.info])
+      l_x = l_x.to(self.device).view(-1)
+
+      return (
+          non_final_mask, non_final_state_nxt, state, action, reward, g_x, l_x
+      )
+    
+    if "l_x" in batch.info[0].keys() and "l2_x" in batch.info[0].keys():
+      
+      l_x = torch.FloatTensor([info["l_x"] for info in batch.info])
+      l_x = l_x.to(self.device).view(-1)
+
+      l2_x = torch.FloatTensor([info["l2_x"] for info in batch.info])
+      l2_x = l2_x.to(self.device).view(-1)
+
+      return (
+          non_final_mask, non_final_state_nxt, state, action, reward, l_x, l2_x
+      )
