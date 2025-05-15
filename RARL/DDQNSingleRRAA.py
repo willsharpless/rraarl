@@ -118,7 +118,7 @@ class DDQNSingleRRAA(DDQN):
     if load_model_path_2:
       
       self.Q_decomposed_2 = Model(dimList, actType, verbose=verbose)
-      self.Q_decomposed_2.load_state_dict(torch.load(load_model_path_2, weights_only=True)['model'])
+      self.Q_decomposed_2.load_state_dict(torch.load(load_model_path_2, weights_only=True))
       self.Q_decomposed_2.eval()
 
       if self.device == torch.device("cuda"):
@@ -188,7 +188,7 @@ class DDQNSingleRRAA(DDQN):
     # == Compute presolved values ==
     if self.mode in ["RAA", "RR", "RRAA"]:
 
-      state_value_decomposed_l1 = torch.zeros(self.BATCH_SIZE).to(self.device)
+      state_value_decomposed_l = torch.zeros(self.BATCH_SIZE).to(self.device)
       state_value_decomposed_l2 = torch.zeros(self.BATCH_SIZE).to(self.device)
       state_value_decomposed_g = torch.zeros(self.BATCH_SIZE).to(self.device)
 
@@ -197,7 +197,7 @@ class DDQNSingleRRAA(DDQN):
           state_value_decomposed_g = self.Q_decomposed_1(state).min(1, keepdim=True)[0].view(-1)
         
         if self.mode == "RR" or self.mode == "RRAA":
-          state_value_decomposed_l1 = self.Q_decomposed_1(state).min(1, keepdim=True)[0].view(-1)
+          state_value_decomposed_l = self.Q_decomposed_1(state).min(1, keepdim=True)[0].view(-1)
           state_value_decomposed_l2 = self.Q_decomposed_2(state).min(1, keepdim=True)[0].view(-1)
 
     # == Discounted Reach-Avoid Bellman Equation (DRABE) ==
@@ -296,7 +296,7 @@ class DDQNSingleRRAA(DDQN):
         non_terminal = torch.min(
             torch.min(torch.max(l_x[non_final_mask], l2_x[non_final_mask]),
                       state_value_nxt[non_final_mask]),
-            torch.min(torch.min(l_x[non_final_mask], state_value_decomposed_l1[non_final_mask]),
+            torch.min(torch.min(l_x[non_final_mask], state_value_decomposed_l[non_final_mask]),
                       torch.min(l2_x[non_final_mask], state_value_decomposed_l2[non_final_mask]))
         )
         terminal = torch.max(l_x, l2_x)
@@ -532,7 +532,7 @@ class DDQNSingleRRAA(DDQN):
         # Check after fixed number of gradient updates
         if self.cntUpdate != 0 and self.cntUpdate % checkPeriod == 0:
           results = env.simulate_trajectories(
-              self.Q_network, T=MAX_EP_STEPS, num_rnd_traj=numRndTraj,
+              self.Q_network, T=MAX_EP_STEPS, num_rnd_traj=numRndTraj, q_func_1=self.Q_decomposed_1, q_func_2=self.Q_decomposed_2,
               toEnd=False
           )[1]
           success = np.sum(results == 1) / results.shape[0]
@@ -567,7 +567,7 @@ class DDQNSingleRRAA(DDQN):
               )
             else:
               env.visualize(
-                  self.Q_network, vmin=vmin, vmax=vmax, cmap="seismic",
+                  self.Q_network, vmin=vmin, vmax=vmax, cmap="seismic", q_func_1=self.Q_decomposed_1, q_func_2=self.Q_decomposed_2,
                   addBias=addBias
               )
             if storeFigure:

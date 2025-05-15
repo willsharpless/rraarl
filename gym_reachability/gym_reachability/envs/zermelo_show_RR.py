@@ -126,17 +126,17 @@ class ZermeloShowRREnv(gym.Env):
       self.target2 = False
     elif envType == 'RR':
       self.target_x_y_w_h = np.array([
-        [-1.25, 0., 0.5, 2.]
+        [-1.25, 4., 0.5, 8.]
       ])
       self.target2_x_y_w_h = np.array([
-        [1.25, 0., 0.5, 2.]
+        [1.25, 4., 0.5, 8.]
       ])
       self.target = True
       self.target2 = True
 
     elif envType == 'R1':
       self.target_x_y_w_h = np.array([
-        [-1.25, 0., 0.5, 2.]
+        [-1.25, 4., 0.5, 8.]
       ])
       # self.target2_x_y_w_h = np.array([
       #   [1.25, 0., 0.5, 2.]
@@ -149,7 +149,7 @@ class ZermeloShowRREnv(gym.Env):
       #   [-1.25, 0., 0.5, 2.]
       # ])
       self.target_x_y_w_h = np.array([
-        [1.25, 0., 0.5, 2.]
+        [1.25, 4., 0.5, 8.]
       ])
       self.target = True
       self.target2 = False
@@ -731,7 +731,7 @@ class ZermeloShowRREnv(gym.Env):
 
   # == Trajectory Functions ==
   def simulate_one_trajectory(
-      self, q_func, T=250, state=None, keepOutOf=False, toEnd=False
+      self, q_func, T=250, state=None, keepOutOf=False, toEnd=False, q_func_1=None, q_func_2=None,
   ):
     """Simulates the trajectory given the state or randomly initialized.
 
@@ -780,7 +780,16 @@ class ZermeloShowRREnv(gym.Env):
 
       state_tensor = torch.FloatTensor(state)
       state_tensor = state_tensor.to(self.device).unsqueeze(0)
-      action_index = q_func(state_tensor).min(dim=1)[1].item()
+
+      if self.mode == "R" or not (self.reached1 or self.reached2):
+        action_index = q_func(state_tensor).min(dim=1)[1].item()
+      
+      elif self.reached1:
+        action_index = q_func_2(state_tensor).min(dim=1)[1].item()
+      
+      elif self.reached2:
+        action_index = q_func_1(state_tensor).min(dim=1)[1].item()
+      
       u = self.discrete_controls[action_index]
 
       state, _ = self.integrate_forward(state, u)
@@ -790,7 +799,7 @@ class ZermeloShowRREnv(gym.Env):
     return traj_x, traj_y, result
 
   def simulate_trajectories(
-      self, q_func, T=250, num_rnd_traj=None, states=None, toEnd=False
+      self, q_func, T=250, num_rnd_traj=None, states=None, toEnd=False, q_func_1=None, q_func_2=None,
   ):
     """
     Simulates the trajectories. If the states are not provided, we pick the
@@ -838,7 +847,7 @@ class ZermeloShowRREnv(gym.Env):
         y = ys[idx[1]]
         state = np.array([x, y])
         traj_x, traj_y, result = self.simulate_one_trajectory(
-            q_func, T=T, state=state, toEnd=toEnd
+            q_func, T=T, state=state, toEnd=toEnd, q_func_1=q_func_1, q_func_2=q_func_2,
         )
         trajectories.append((traj_x, traj_y))
         results[idx] = result
@@ -848,7 +857,7 @@ class ZermeloShowRREnv(gym.Env):
       results = np.empty(shape=(len(states),), dtype=int)
       for idx, state in enumerate(states):
         traj_x, traj_y, result = self.simulate_one_trajectory(
-            q_func, T=T, state=state, toEnd=toEnd
+            q_func, T=T, state=state, toEnd=toEnd, q_func_1=q_func_1, q_func_2=q_func_2,
         )
         trajectories.append((traj_x, traj_y))
         results[idx] = result
@@ -861,7 +870,7 @@ class ZermeloShowRREnv(gym.Env):
 
   def visualize(
       self, q_func, vmin=-1, vmax=1, nx=201, ny=201, labels=None,
-      boolPlot=False, addBias=False, cmap='seismic'
+      boolPlot=False, addBias=False, cmap='seismic', q_func_1=None, q_func_2=None,
   ):
     """
     Visulaizes the trained Q-network in terms of state values and trajectories
@@ -898,7 +907,7 @@ class ZermeloShowRREnv(gym.Env):
 
     # == Plot Trajectories ==
     self.plot_trajectories(
-        q_func, states=self.visual_initial_states, toEnd=False, ax=ax
+        q_func, states=self.visual_initial_states, toEnd=False, ax=ax, q_func_1=q_func_1, q_func_2=q_func_2,
     )
 
     # == Formatting ==
@@ -954,7 +963,7 @@ class ZermeloShowRREnv(gym.Env):
 
   def plot_trajectories(
       self, q_func, T=250, num_rnd_traj=None, states=None, toEnd=False,
-      ax=None, c='k', lw=2, zorder=2
+      ax=None, c='k', lw=2, zorder=2, q_func_1=None, q_func_2=None,
   ):
     """Plots trajectories given the agent's Q-network.
 
@@ -980,7 +989,7 @@ class ZermeloShowRREnv(gym.Env):
             or (len(states) == num_rnd_traj))
 
     trajectories, results = self.simulate_trajectories(
-        q_func, T=T, num_rnd_traj=num_rnd_traj, states=states, toEnd=toEnd
+        q_func, T=T, num_rnd_traj=num_rnd_traj, states=states, toEnd=toEnd, q_func_1=q_func_1, q_func_2=q_func_2,
     )
 
     for traj in trajectories:

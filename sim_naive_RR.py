@@ -167,17 +167,21 @@ print(args)
 # args.load_path = './scratch/naiveRAA/DDQN/RA/naiveRAA_2-toEnd/'
 # args.load_step = 280000
 
-args.mode = 'R'
-args.envType = 'R'
+# args.mode = 'R'
+# args.envType = 'R'
 
+# args.name = 'R1_test'
 # args.mode = 'R'
 # args.envType = 'R1'
 
+# args.name = 'R2_test'
 # args.mode = 'R'
 # args.envType = 'R2'
 
-# args.mode = 'RR'
-# args.envType = 'RR'
+args.mode = 'RR'
+args.envType = 'RR'
+args.load_model_path_1 = './scratch/naiveRR/DDQN/R/R1_test-toEnd/model/Q-60000.pth'
+args.load_model_path_2 = './scratch/naiveRR/DDQN/R/R2_test-toEnd/model/Q-400000.pth'
 
 # == CONFIGURATION ==
 env_name = "zermelo_show_RR"
@@ -458,7 +462,7 @@ if plotFigure or storeFigure:
         actDistMtx[idx] = action_index
 
         _, _, result = env.simulate_one_trajectory(
-            agent.Q_network, T=250, state=state, toEnd=False
+            agent.Q_network, T=250, state=state, toEnd=False, q_func_1=agent.Q_decomposed_1, q_func_2=agent.Q_decomposed_2,
         )
         resultMtx[idx] = result
         it.iternext()
@@ -479,7 +483,7 @@ if plotFigure or storeFigure:
       cmap='seismic', vmin=vmin, vmax=vmax, zorder=-1
   )
   env.plot_trajectories(
-      agent.Q_network, states=env.visual_initial_states, toEnd=True, ax=ax,
+      agent.Q_network, states=env.visual_initial_states, toEnd=True, ax=ax, q_func_1=agent.Q_decomposed_1, q_func_2=agent.Q_decomposed_2,
       c='k', lw=1.5
   )
   ax.set_title(f'{args.mode} Value & Rollout', fontsize=20)
@@ -513,7 +517,7 @@ if plotFigure or storeFigure:
     #   )
     
     env.plot_trajectories(
-    agent.Q_decomposed_1, states=env.visual_initial_states, toEnd=True, ax=ax,
+    agent.Q_decomposed_1, states=env.visual_initial_states, toEnd=True, ax=ax, q_func_1=agent.Q_decomposed_1, q_func_2=agent.Q_decomposed_2,
     c='k', lw=1.5
     )
     ax.set_title('A Value & Rollout', fontsize=20)
@@ -521,7 +525,7 @@ if plotFigure or storeFigure:
     ax.set_xlabel(load_tag, fontsize=8)
 
   for axi, ax in enumerate(axes):
-    env.plot_target_failure_set(ax=ax)
+    env.plot_target_sets(ax=ax)
     # if axi == 0: env.plot_reach_avoid_set(ax=ax)
     env.plot_formatting(ax=ax)
 
