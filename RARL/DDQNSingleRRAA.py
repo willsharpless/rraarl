@@ -75,6 +75,8 @@ class DDQNSingleRRAA(DDQN):
     )
 
     # == Load pre-solved networks ==
+    self.Q_decomposed_1 = None
+    self.Q_decomposed_2 = None
     if mode in ["RAA", "RR", "RRAA"]:
       if not CONFIG.LOAD_MODEL_PATH_1 and not CONFIG.LOAD_MODEL_PATH_2:
         raise AssertionError("Must load presovled models for RAA / RR / RRAA problems")
@@ -343,7 +345,7 @@ class DDQNSingleRRAA(DDQN):
       cnt += 1
       print("\rWarmup Buffer [{:d}]".format(cnt), end="")
       s = env.reset()
-      a, a_idx = self.select_action(s, explore=True)
+      a, a_idx = self.select_action(s, explore=True, env=env)
       s_, r, done, info = env.step(a_idx)
       s_ = None if done else s_
       self.store_transition(s, a_idx, r, s_, info)
@@ -624,7 +626,7 @@ class DDQNSingleRRAA(DDQN):
     trainProgress = np.array(trainProgress)
     return trainingRecords, trainProgress
 
-  def select_action(self, state, explore=False):
+  def select_action(self, state, explore=False, env=None):
     """Selects the action given the state and conditioned on `explore` flag.
 
     Args:
@@ -642,5 +644,17 @@ class DDQNSingleRRAA(DDQN):
     if (np.random.rand() < self.EPSILON) and explore:
       action_index = np.random.randint(0, self.numAction)
     else:
+
       action_index = self.Q_network(state).min(dim=1)[1].item()
+
+      if self.mode == "RR" and env:
+        if not (env.reached1 or env.reached2):
+          action_index = self.Q_network(state).min(dim=1)[1].item()
+      
+        elif env.reached1 and not env.reached2:
+          action_index = self.Q_decomposed_2(state).min(dim=1)[1].item()
+      
+        elif env.reached2 and not env.reached1:
+          action_index = self.Q_decomposed_1(state).min(dim=1)[1].item()
+
     return self.actionList[action_index], action_index

@@ -167,8 +167,15 @@ print(args)
 # args.load_path = './scratch/naiveRAA/DDQN/RA/naiveRAA_2-toEnd/'
 # args.load_step = 280000
 
-# args.mode = 'R'
-# args.envType = 'R'
+args.mode = 'R'
+args.envType = 'R'
+args.name = 'test_wider2_anneal'
+args.annealing = True
+args.skip_learn = True
+args.load_path = './scratch/naiveRR/DDQN/R/test_wider2_anneal-toEnd/'
+# args.load_step = 120000
+# args.load_step = 300000
+args.load_step = 340000
 
 # args.name = 'R1_test'
 # args.mode = 'R'
@@ -178,10 +185,17 @@ print(args)
 # args.mode = 'R'
 # args.envType = 'R2'
 
-args.mode = 'RR'
-args.envType = 'RR'
-args.load_model_path_1 = './scratch/naiveRR/DDQN/R/R1_test-toEnd/model/Q-60000.pth'
-args.load_model_path_2 = './scratch/naiveRR/DDQN/R/R2_test-toEnd/model/Q-400000.pth'
+# args.name = 'test5_r1_400k_r2_340k_annealed_save'
+# args.mode = 'RR'
+# args.envType = 'RR'
+# # args.load_model_path_1 = './scratch/naiveRR/DDQN/R/R1_test-toEnd/model/Q-60000.pth'
+# args.load_model_path_1 = './scratch/naiveRR/DDQN/R/R1_test-toEnd/model/Q-400000.pth'
+# # args.load_model_path_2 = './scratch/naiveRR/DDQN/R/R2_test-toEnd/model/Q-400000.pth'
+# args.load_model_path_2 = './scratch/naiveRR/DDQN/R/R2_test-toEnd/model/Q-340000.pth'
+# args.skip_learn = True
+# args.load_path = './scratch/naiveRR/DDQN/RR/test5_r1_400k_r2_340k_annealed-toEnd/'
+# args.load_step = 340000
+# args.annealing = True
 
 # == CONFIGURATION ==
 env_name = "zermelo_show_RR"
@@ -444,31 +458,34 @@ if plotFigure or storeFigure:
   xs = np.linspace(env.bounds[0, 0], env.bounds[0, 1], nx)
   ys = np.linspace(env.bounds[1, 0], env.bounds[1, 1], ny)
   
-  if args.mode in ["RA", "R", "A"]:
-    resultMtx = np.empty((nx, ny), dtype=int)
-    actDistMtx = np.empty((nx, ny), dtype=int)
-    it = np.nditer(resultMtx, flags=['multi_index'])
+#   if args.mode in ["RA", "R", "A"]:
+#     resultMtx = np.empty((nx, ny), dtype=int)
+#     actDistMtx = np.empty((nx, ny), dtype=int)
+#     it = np.nditer(resultMtx, flags=['multi_index'])
 
-    while not it.finished:
-        idx = it.multi_index
-        print(idx, end='\r')
-        x = xs[idx[0]]
-        y = ys[idx[1]]
+#     while not it.finished:
+#         idx = it.multi_index
+#         print(idx, end='\r')
+#         x = xs[idx[0]]
+#         y = ys[idx[1]]
 
-        state = np.array([x, y])
-        stateTensor = torch.FloatTensor(state).to(agent.device).unsqueeze(0)
-        action_index = agent.Q_network(stateTensor).min(dim=1)[1].cpu().item()
-        # u = env.discrete_controls[action_index]
-        actDistMtx[idx] = action_index
+#         state = np.array([x, y])
+#         stateTensor = torch.FloatTensor(state).to(agent.device).unsqueeze(0)
+#         action_index = agent.Q_network(stateTensor).min(dim=1)[1].cpu().item()
+#         # u = env.discrete_controls[action_index]
+#         actDistMtx[idx] = action_index
 
-        _, _, result = env.simulate_one_trajectory(
-            agent.Q_network, T=250, state=state, toEnd=False, q_func_1=agent.Q_decomposed_1, q_func_2=agent.Q_decomposed_2,
-        )
-        resultMtx[idx] = result
-        it.iternext()
+#         _, _, result = env.simulate_one_trajectory(
+#             agent.Q_network, T=250, state=state, toEnd=False, q_func_1=agent.Q_decomposed_1, q_func_2=agent.Q_decomposed_2,
+#         )
+#         resultMtx[idx] = result
+#         it.iternext()
 
 #   fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharex=True, sharey=True)
-  fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True, sharey=True)
+  if args.mode in ["RA", "R", "A"]:
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True, sharey=True)
+  else:
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharex=True, sharey=True)
   axStyle = env.get_axes()
   
   # = Rollout
@@ -477,6 +494,7 @@ if plotFigure or storeFigure:
 #       resultMtx.T != 1, interpolation='none', extent=axStyle[0],
 #       origin="lower", cmap='seismic', vmin=0, vmax=1, zorder=-1
 #   )
+  vmin, vmax = -15, 15
   _, _, v = env.get_value(agent.Q_network, nx, ny)
   im = ax.imshow(
       v.T, interpolation='none', extent=axStyle[0], origin="lower",
@@ -492,35 +510,45 @@ if plotFigure or storeFigure:
   if args.mode in ["RA", "R", "A"]:
     # = Action
     ax = axes[0]
-    im = ax.imshow(
-        actDistMtx.T, interpolation='none', extent=axStyle[0], origin="lower",
-        cmap='seismic', vmin=0, vmax=actionNum - 1, zorder=-1
-    )
+    # im = ax.imshow(
+    #     actDistMtx.T, interpolation='none', extent=axStyle[0], origin="lower",
+    #     cmap='seismic', vmin=0, vmax=actionNum - 1, zorder=-1
+    # )
     ax.set_title('Action', fontsize=20)
   
   else:
-    # = Value
+    # = Value Decomposed 1
     ax = axes[0]
-    if args.mode in ["RA", "R", "A"]:
-        _, _, v = env.get_value(agent.Q_network, nx, ny)
-    else:
-        _, _, v = env.get_value(agent.Q_decomposed_1, nx, ny)
+    _, _, v = env.get_value(agent.Q_decomposed_1, nx, ny)
     im = ax.imshow(
         v.T, interpolation='none', extent=axStyle[0], origin="lower",
         cmap='seismic', vmin=vmin, vmax=vmax, zorder=-1
-
-    ## FIXME WAS: ADD Q2 FOR RR PROBLEM
-        
     )
+
     #   CS = ax.contour(
     #       xs, ys, v.T, levels=[0], colors='k', linewidths=2, linestyles='dashed'
     #   )
     
     env.plot_trajectories(
-    agent.Q_decomposed_1, states=env.visual_initial_states, toEnd=True, ax=ax, q_func_1=agent.Q_decomposed_1, q_func_2=agent.Q_decomposed_2,
-    c='k', lw=1.5
+        agent.Q_decomposed_1, states=env.visual_initial_states, toEnd=True, ax=ax, q_func_1=agent.Q_decomposed_1, q_func_2=agent.Q_decomposed_2,
+        c='k', lw=1.5
     )
-    ax.set_title('A Value & Rollout', fontsize=20)
+    ax.set_title('R1 Value & Rollout', fontsize=20)
+    load_tag = f'Load: {args.load_model_path_1.split("A/")[-1].split(".pth")[0]}'
+    ax.set_xlabel(load_tag, fontsize=8)
+
+    # = Value Decomposed 2
+    ax = axes[2]
+    _, _, v = env.get_value(agent.Q_decomposed_2, nx, ny)
+    im = ax.imshow(
+        v.T, interpolation='none', extent=axStyle[0], origin="lower",
+        cmap='seismic', vmin=vmin, vmax=vmax, zorder=-1
+    )
+    env.plot_trajectories(
+        agent.Q_decomposed_2, states=env.visual_initial_states, toEnd=True, ax=ax, q_func_1=agent.Q_decomposed_1, q_func_2=agent.Q_decomposed_2,
+        c='k', lw=1.5
+    )
+    ax.set_title('R2 Value & Rollout', fontsize=20)
     load_tag = f'Load: {args.load_model_path_1.split("A/")[-1].split(".pth")[0]}'
     ax.set_xlabel(load_tag, fontsize=8)
 
@@ -534,7 +562,7 @@ if plotFigure or storeFigure:
     if not args.skip_learn:
         figurePath = os.path.join(figureFolder, 'value_rollout_action.png')
     else:
-        figurePath = os.path.join(figureFolder, 'value_rollout_action_replot.png')
+        figurePath = os.path.join(figureFolder, 'value_rollout_action_replot2.png')
     fig.savefig(figurePath)
   if plotFigure:
     plt.show()

@@ -42,6 +42,8 @@ class ZermeloShowRREnv(gym.Env):
             Defaults to 'gap'. Avoid only have 'NAME_avoid', eg. 'gap_avoid'
     """
     self.envType = envType
+    self.reached1 = False
+    self.reached2 = False
 
     # State Bounds.
     self.bounds = np.array([[-2, 2], [-2, 10]])
@@ -198,8 +200,8 @@ class ZermeloShowRREnv(gym.Env):
     
     self.visual_initial_states = [
         np.array([0, 0]),
-        np.array([-0.5, 0]),
-        np.array([0.5, 0]),
+        np.array([-0.65, 0]),
+        np.array([0.65, 0]),
     ]
     # if envType == 'basic' or envType == 'easy':
     #   self.visual_initial_states = [
@@ -272,9 +274,9 @@ class ZermeloShowRREnv(gym.Env):
     x, y = self.state
     l_x = self.target_margin(np.array([x, y]))
     l2_x = self.target2_margin(np.array([x, y]))
-    if l_x < 0:
+    if l_x < -0.5:
       self.reached1 = True
-    if l2_x < 0:
+    if l2_x < -0.5:
       self.reached2 = True
 
     return np.copy(self.state)
@@ -315,6 +317,7 @@ class ZermeloShowRREnv(gym.Env):
     """
 
     u = self.discrete_controls[action]
+
     # state, [l_x, g_x] = self.integrate_forward(self.state, u)
     state, [l_x, l2_x] = self.integrate_forward(self.state, u)
     self.state = state
@@ -324,9 +327,9 @@ class ZermeloShowRREnv(gym.Env):
     elif self.mode == 'RR':
       success = ((l_x <= 0) & (self.reached2)) | (l2_x <= 0) & (self.reached1)
 
-    if l_x < 0:
+    if l_x < -0.5:
       self.reached1 = True
-    if l2_x < 0:
+    if l2_x < -0.5:
       self.reached2 = True
 
     # = `cost` signal
@@ -778,16 +781,22 @@ class ZermeloShowRREnv(gym.Env):
           result = 1  # succeeded
           break
 
+      if self.target_margin(state[:2]) < -0.5:
+        self.reached1 = True
+      
+      if self.target2_margin(state[:2]) < -0.5:
+        self.reached2 = True
+
       state_tensor = torch.FloatTensor(state)
       state_tensor = state_tensor.to(self.device).unsqueeze(0)
 
       if self.mode == "R" or not (self.reached1 or self.reached2):
         action_index = q_func(state_tensor).min(dim=1)[1].item()
       
-      elif self.reached1:
+      elif self.reached1 and not self.reached2:
         action_index = q_func_2(state_tensor).min(dim=1)[1].item()
       
-      elif self.reached2:
+      elif self.reached2 and not self.reached1:
         action_index = q_func_1(state_tensor).min(dim=1)[1].item()
       
       u = self.discrete_controls[action_index]
@@ -795,6 +804,9 @@ class ZermeloShowRREnv(gym.Env):
       state, _ = self.integrate_forward(state, u)
       traj_x.append(state[0])
       traj_y.append(state[1])
+    
+    self.reached1 = False
+    self.reached2 = False
 
     return traj_x, traj_y, result
 
